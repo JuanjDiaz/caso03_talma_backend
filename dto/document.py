@@ -15,3 +15,14 @@ class DocumentRequest(BaseModel):
 
     class Config:
         orm_mode = True 
+
+class DocumentResponse(BaseModel):
+    document_id: int
+    file_name: Optional[str] = None
+    type: Optional[str] = None
+    is_anonymized: bool
+    fields: Optional[List[dict]] = None
+
+    class Config:
+        orm_mode = True 
+        from_attributes = True 
