@@ -19,3 +19,6 @@ class DocumentServiceImpl(DocumentService):
         document.file_name = t.fileName
         document.is_anonymized = t.isAnonymized 
         await self.document_repository.save(document)
+
+    async def get_all_documents(self, skip: int = 0, limit: int = 10):
+        return await self.document_repository.find_all(skip, limit)
