@@ -5,7 +5,8 @@ from config.mapper import Mapper
 from dto.universal_dto import BaseOperacionResponse
 from dto.usuario_dtos import UsuarioRequest
 from utl.generic_util import GenericUtil
-
+from config.config import settings
+from utl.security_util import SecurityUtil
 
 class UsuarioServiceImpl(UsuarioService):
 
@@ -28,5 +29,6 @@ class UsuarioServiceImpl(UsuarioService):
         else:
             usuario = self.modelMapper.to_entity(t, Usuario)
             usuario.usuario = t.primerNombre + t.apellidoPaterno + GenericUtil.generate_unique_code_8()
+            usuario.password = SecurityUtil.get_password_hash(settings.PASWORD_INICIAL) 
             await self.usuario_repository.save(usuario)
             

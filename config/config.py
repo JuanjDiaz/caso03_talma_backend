@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str
     LLM_MODEL_NAME: str 
     DATABASE_URL: str
+    PASWORD_INICIAL: str
 
     model_config = SettingsConfigDict(
         env_file=".env",
