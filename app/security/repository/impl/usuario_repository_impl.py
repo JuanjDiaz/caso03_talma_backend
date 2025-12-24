@@ -1,10 +1,16 @@
 import logging
+from typing import List, Tuple
+from sqlalchemy import func
 from app.integration.impl.base_repository_impl import BaseRepositoryImpl
 from app.security.domain import Usuario
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.future import select
+from app.security.domain.VwUsuario import VwUsuario
 from app.security.repository.usuario_repository import UsuarioRepository
 from core.exceptions import NotFoundException
+from dto.collection_response import CollectionResponse
+from dto.usuario_dtos import UsuarioFiltroRequest, UsuarioResponse
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +28,9 @@ class UsuarioRepositoryImpl(BaseRepositoryImpl[Usuario], UsuarioRepository):
             logger.error(f"Error saving user: {e}", exc_info=True)
             return False
         
+
+
+
     async def  get(self, usuarioId:str) -> Usuario:
         try: 
             usuario = await self.get_by_id(usuarioId)
@@ -31,3 +40,34 @@ class UsuarioRepositoryImpl(BaseRepositoryImpl[Usuario], UsuarioRepository):
         except Exception as e: 
             logger.error(f"Error getting user {usuarioId}: {e}", exc_info=True)
             raise NotFoundException("Usuario no encontrado")
+
+
+    async def find(self, request: UsuarioFiltroRequest) -> Tuple[List[VwUsuario], int]:
+        try:
+            query = select(VwUsuario)
+            
+            if request.nombre:
+                query = query.filter(VwUsuario.nombre_completo.ilike(f"%{request.nombre}%"))
+            
+            if request.rolCodigo:
+                query = query.filter(VwUsuario.rol_codigo == request.rolCodigo)
+                
+            if request.fechaInicio and request.fechaFin:
+                 query = query.filter(VwUsuario.fecha_consulta.between(request.fechaInicio, request.fechaFin))
+            
+      
+            count_query = select(func.count()).select_from(query.subquery())
+            total_count = await self.db.execute(count_query)
+            total = total_count.scalar_one()
+
+          
+            query = query.order_by(VwUsuario.fecha_consulta.desc())
+            query = query.offset(request.start).limit(request.limit)
+            result = await self.db.execute(query)
+            elements = result.scalars().all()
+
+            return elements, total
+            
+        except Exception as e:
+            logger.error(f"Error finding users: {e}", exc_info=True)
+            return [], 0
