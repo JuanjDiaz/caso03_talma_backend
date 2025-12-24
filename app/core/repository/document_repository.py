@@ -9,7 +9,7 @@ class DocumentRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_all(self) -> list[Document]:
+    async def find_all(self, skip: int = 0, limit: int = 10) -> list[Document]:
         pass
 
     @abstractmethod

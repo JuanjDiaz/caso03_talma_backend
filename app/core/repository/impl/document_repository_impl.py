@@ -1,8 +1,10 @@
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.domain.document import Document
 from app.core.repository.document_repository import DocumentRepository
 from sqlalchemy import select
 
+logger = logging.getLogger(__name__)
 
 class DocumentRepositoryImpl(DocumentRepository):
 
@@ -10,22 +12,25 @@ class DocumentRepositoryImpl(DocumentRepository):
         self.db = db
 
     async def save(self, doc: Document) -> Document:
-        print(f"DEBUG: Repository saving document {doc.file_name}")
+        logger.debug(f"Repository saving document {doc.file_name}")
         try:
             self.db.add(doc)
-            print("DEBUG: Added to session")
             await self.db.commit()
-            print("DEBUG: Committed")
             await self.db.refresh(doc)
-            print("DEBUG: Refreshed")
+            logger.debug(f"Document {doc.file_name} saved successfully with ID {doc.document_id}")
             return doc
         except Exception as e:
-            print(f"DEBUG: Error in repository save: {e}")
+            logger.error(f"Error in repository save for {doc.file_name}: {e}", exc_info=True)
             raise e
 
-    async def find_all(self) -> list[Document]:
-        result = await self.db.execute(select(Document))
-        return result.scalars().all()
+    async def find_all(self, skip: int = 0, limit: int = 10) -> list[Document]:
+        try:
+            query = select(Document).offset(skip).limit(limit)
+            result = await self.db.execute(query)
+            return result.scalars().all()
+        except Exception as e:
+            logger.error(f"Error retrieving documents: {e}", exc_info=True)
+            return []
 
     async def find_by_id(self, id):
         result = await self.db.execute(
@@ -37,6 +42,10 @@ class DocumentRepositoryImpl(DocumentRepository):
         doc = await self.find_by_id(id)
         if not doc:
             return False
-        await self.db.delete(doc)
-        await self.db.commit()
-        return True
+        try:
+            await self.db.delete(doc)
+            await self.db.commit()
+            return True
+        except Exception as e:
+             logger.error(f"Error deleting document {id}: {e}", exc_info=True)
+             raise e

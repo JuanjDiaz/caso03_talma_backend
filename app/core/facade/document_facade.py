@@ -9,3 +9,7 @@ class DocumentFacade(ABC):
     @abstractmethod
     async def save(self, request: List[DocumentRequest]) -> BaseOperacionResponse:
         pass
+
+    @abstractmethod
+    async def get_all_documents(self, skip: int = 0, limit: int = 10):
+        pass
