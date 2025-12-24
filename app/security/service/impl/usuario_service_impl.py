@@ -3,7 +3,8 @@ from app.security.repository.usuario_repository import UsuarioRepository
 from app.security.service.usuario_service import UsuarioService
 from config.mapper import Mapper
 from dto.universal_dto import BaseOperacionResponse
-from dto.usuario_dtos import UsuarioRequest
+from dto.usuario_dtos import UsuarioRequest, UsuarioFiltroRequest, UsuarioFiltroResponse
+from dto.collection_response import CollectionResponse
 from utl.generic_util import GenericUtil
 from config.config import settings
 from utl.security_util import SecurityUtil
@@ -40,3 +41,27 @@ class UsuarioServiceImpl(UsuarioService):
 
     async def get(self, usuarioId: str) -> Usuario:
         return await self.usuario_repository.get(usuarioId)
+
+    async def find(self, request: UsuarioFiltroRequest) -> CollectionResponse[UsuarioFiltroResponse]:
+        usuarios, count = await self.usuario_repository.find(request)
+        datos = []
+        for u in usuarios:
+            datos.append(UsuarioFiltroResponse(
+                usuarioId=str(u.usuario_id),
+                nombreCompleto=u.nombre_completo,
+                correo=u.correo,
+                celular=u.celular,
+                rolCodigo=u.rol_codigo,
+                rol=u.rol,
+                tipoDocumento=u.tipo_documento,
+                documento=u.documento,
+                estado='ACTIVO' if u.habilitado else 'INACTIVO',
+                creado=str(u.fecha_consulta) if u.fecha_consulta else None
+            ))
+        return CollectionResponse[UsuarioFiltroResponse](
+            elements=datos, 
+            totalCount=count,
+            start=request.start,
+            limit=request.limit,
+            sort=request.sort
+        )
