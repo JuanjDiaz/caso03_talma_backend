@@ -24,9 +24,9 @@ LOGGING_CONFIG = {
     },
     "loggers": {
         "app": {"handlers": ["console"], "level": settings.LOG_LEVEL, "propagate": False},
-        "uvicorn": {"handlers": ["console"], "level": "INFO"},
-        "uvicorn.error": {"handlers": ["console"], "level": "INFO"},
-        "uvicorn.access": {"handlers": ["console"], "level": "INFO"},
+        "uvicorn": {"handlers": ["console"], "level": "WARNING"},
+        "uvicorn.error": {"handlers": ["console"], "level": "WARNING"},
+        "uvicorn.access": {"handlers": ["console"], "level": "WARNING"},
     },
     "root": {
         "handlers": ["console"],
