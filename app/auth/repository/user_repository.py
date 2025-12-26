@@ -19,7 +19,7 @@ class UserRepository:
                 email=usuario.correo if usuario.correo else "", # Handle missing email if strictly username login? Schema requires email.
                 # If email is missing in DB but schema requires it, this might fail validation if passed empty. 
                 # Let's assume valid users have emails or relax User schema later if needed.
-                full_name=f"{usuario.primer_nombre or ''} {usuario.apellido_paterno or ''}".strip(),
+                full_name=f"{usuario.primer_nombre or ''} {usuario.apellido_paterno or ''} {usuario.apellido_materno or ''}".strip(),
                 is_active=True
             )
         return None
