@@ -9,16 +9,20 @@ import random
 from app.auth.service.auth_service import AuthService
 from app.auth.repository.user_repository import UserRepository
 from app.auth.schema.user import UserLogin, Token
+from app.core.services.email_service import EmailService
+from app.core.services.impl.email_service_impl import EmailServiceImpl
 from core.exceptions import AppBaseException
 from config.config import settings
 from utl.security_util import SecurityUtil
 
 # Keep in-memory for codes for now as discussed
-fake_verification_codes: Dict[str, str] = {}
+# Structure: {email: {"code": str, "expiry": datetime}}
+fake_verification_codes: Dict[str, Dict] = {}
 
 class AuthServiceImpl(AuthService):
-    def __init__(self):
+    def __init__(self, email_service: EmailService = None):
         self.user_repository = UserRepository()
+        self.email_service = email_service or EmailServiceImpl()
 
     def create_access_token(self, data: dict, expires_delta: timedelta | None = None):
         to_encode = data.copy()
@@ -57,14 +61,36 @@ class AuthServiceImpl(AuthService):
              raise AppBaseException("Email not registered", status_code=status.HTTP_404_NOT_FOUND)
 
         code = str(random.randint(100000, 999999))
-        fake_verification_codes[email] = code
-        print(f"DEBUG: Verification code for {email} is {code}") 
-        return f"Code sent to {email}. (DEBUG Code: {code})"
+        expiry = datetime.utcnow() + timedelta(minutes=5)
+        fake_verification_codes[email] = {"code": code, "expiry": expiry}
+        
+        print(f"DEBUG: Verification code for {email} is {code} (expires at {expiry} UTC)") 
+
+        # Send email
+        nombre_completo = user.full_name or "Usuario"
+        email_sent = self.email_service.send_verification_code(email, code, nombre_completo)
+        
+        if not email_sent:
+            print(f"ERROR: Failed to send verification email to {email}")
+
+        return f"Code sent to {email}."
 
     async def verify_code(self, db: AsyncSession, email: str, code: str) -> bool:
-        stored_code = fake_verification_codes.get(email)
-        if not stored_code or stored_code != code:
+        data = fake_verification_codes.get(email)
+        
+        if not data:
             raise AppBaseException("Invalid verification code", status_code=status.HTTP_400_BAD_REQUEST)
+
+        stored_code = data.get("code")
+        expiry = data.get("expiry")
+
+        if stored_code != code:
+            raise AppBaseException("Invalid verification code", status_code=status.HTTP_400_BAD_REQUEST)
+
+        if datetime.utcnow() > expiry:
+            del fake_verification_codes[email]
+            raise AppBaseException("Verification code has expired", status_code=status.HTTP_400_BAD_REQUEST)
+
         return True
 
     async def reset_password(self, db: AsyncSession, email: str, code: str, new_password: str) -> bool:
@@ -77,5 +103,7 @@ class AuthServiceImpl(AuthService):
         if not success:
              raise AppBaseException("User not found", status_code=status.HTTP_404_NOT_FOUND)
              
-        del fake_verification_codes[email]
+        if email in fake_verification_codes:
+            del fake_verification_codes[email]
+            
         return True

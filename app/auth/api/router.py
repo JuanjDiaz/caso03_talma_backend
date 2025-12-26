@@ -6,10 +6,12 @@ from typing import Annotated
 
 from app.auth.schema.user import User, UserLogin, Token, UserForgotPassword, UserVerifyCode, UserResetPassword
 from app.auth.service.impl.auth_service_impl import AuthServiceImpl
+from app.core.services.impl.email_service_impl import EmailServiceImpl
 from config.database_config import get_db
 
 router = APIRouter()
-auth_service = AuthServiceImpl()
+email_service = EmailServiceImpl()
+auth_service = AuthServiceImpl(email_service=email_service)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
