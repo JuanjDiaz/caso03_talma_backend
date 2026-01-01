@@ -22,6 +22,7 @@ class Usuario(BaseModel):
     correo = Column(String, nullable=True)
     celular = Column(String, nullable=True)
     token = Column(String, nullable=True)
+    primer_ingreso = Column(Boolean, default=True)
   
     rol = relationship("Rol", back_populates="usuarios")
 

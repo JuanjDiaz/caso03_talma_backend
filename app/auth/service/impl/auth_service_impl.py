@@ -8,7 +8,7 @@ import random
 
 from app.auth.service.auth_service import AuthService
 from app.auth.repository.user_repository import UserRepository
-from app.auth.schema.user import UserLogin, Token
+from app.auth.schema.user import UserLogin, Token, User
 from app.core.services.email_service import EmailService
 from app.core.services.impl.email_service_impl import EmailServiceImpl
 from core.exceptions import AppBaseException
@@ -59,7 +59,8 @@ class AuthServiceImpl(AuthService):
                 "nombre":  f"{user_orm.primer_nombre or ''} {user_orm.segundo_nombre or ''} {user_orm.apellido_paterno or ''} {user_orm.apellido_materno or ''}".replace("  ", " ").strip(),
                 "rolId": str(user_orm.rol.rol_id) if user_orm.rol else None, 
                 "rolCodigo": user_orm.rol.codigo if user_orm.rol else None,
-                "rol": user_orm.rol.nombre if user_orm.rol else None
+                "rol": user_orm.rol.nombre if user_orm.rol else None,
+                "primerIngreso": user_orm.primer_ingreso
             }, expires_delta=access_token_expires
         )
         return Token(access_token=access_token, token_type="bearer")
@@ -118,3 +119,31 @@ class AuthServiceImpl(AuthService):
             del fake_verification_codes[email]
             
         return True
+
+    async def get_user_by_token(self, db: AsyncSession, token: str) -> User:
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            email: str = payload.get("sub")
+            if email is None:
+                raise AppBaseException("Could not validate credentials", status_code=status.HTTP_401_UNAUTHORIZED)
+        except Exception:
+            raise AppBaseException("Could not validate credentials", status_code=status.HTTP_401_UNAUTHORIZED)
+            
+        user = await self.user_repository.get_by_email(db, email)
+        if user is None:
+            raise AppBaseException("User not found", status_code=status.HTTP_404_NOT_FOUND)
+        return user
+
+    async def change_password(self, db: AsyncSession, email: str, new_password: str) -> bool:
+        # Check user existence
+        user_orm = await self.user_repository.get_user_orm_by_email(db, email)
+        if not user_orm:
+             raise AppBaseException("User not found", status_code=status.HTTP_404_NOT_FOUND)
+        
+        hashed_pwd = SecurityUtil.get_password_hash(new_password)
+        # update_password in repository already sets primer_ingreso = False
+        success = await self.user_repository.update_password(db, email, hashed_pwd)
+        
+        if success:
+            return True
+        return False

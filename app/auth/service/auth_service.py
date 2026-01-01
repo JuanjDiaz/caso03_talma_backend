@@ -1,7 +1,7 @@
 
 from abc import ABC, abstractmethod
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.auth.schema.user import UserLogin, Token
+from app.auth.schema.user import UserLogin, Token, User
 
 class AuthService(ABC):
     @abstractmethod
@@ -18,4 +18,12 @@ class AuthService(ABC):
 
     @abstractmethod
     async def reset_password(self, db: AsyncSession, email: str, code: str, new_password: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def get_user_by_token(self, db: AsyncSession, token: str) -> User:
+        pass
+
+    @abstractmethod
+    async def change_password(self, db: AsyncSession, email: str, new_password: str) -> bool:
         pass

@@ -15,9 +15,11 @@ class UserLogin(BaseModel):
 class User(UserBase):
     id: int | str
     is_active: bool = True
+    primerIngreso: bool = True
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 class Token(BaseModel):
     access_token: str
@@ -33,4 +35,7 @@ class UserVerifyCode(BaseModel):
 class UserResetPassword(BaseModel):
     email: EmailStr
     code: str
+    new_password: str = Field(..., min_length=8)
+
+class ChangePasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8)

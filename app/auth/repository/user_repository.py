@@ -21,7 +21,8 @@ class UserRepository:
                 # If email is missing in DB but schema requires it, this might fail validation if passed empty. 
                 # Let's assume valid users have emails or relax User schema later if needed.
                 full_name=f"{usuario.primer_nombre or ''} {usuario.apellido_paterno or ''} {usuario.apellido_materno or ''}".strip(),
-                is_active=True
+                is_active=True,
+                primerIngreso=usuario.primer_ingreso
             )
         return None
 
@@ -44,6 +45,7 @@ class UserRepository:
         user_orm = await self.get_user_orm_by_identifier(db, email)
         if user_orm:
             user_orm.password = new_hashed_password
+            user_orm.primer_ingreso = False
             db.add(user_orm)
             await db.commit()
             await db.refresh(user_orm)

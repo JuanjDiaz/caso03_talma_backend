@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
 
-from app.auth.schema.user import User, UserLogin, Token, UserForgotPassword, UserVerifyCode, UserResetPassword
+from app.auth.schema.user import User, UserLogin, Token, UserForgotPassword, UserVerifyCode, UserResetPassword, ChangePasswordRequest
 from app.auth.service.impl.auth_service_impl import AuthServiceImpl
 from app.core.services.impl.email_service_impl import EmailServiceImpl
 from config.database_config import get_db
@@ -48,6 +48,18 @@ async def reset_password(user: UserResetPassword, db: AsyncSession = Depends(get
     raise HTTPException(status_code=400, detail="Failed to reset password")
 
 @router.get("/me", response_model=User)
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
-    # TODO: Implement get_current_user_by_token in service if needed for realauth
-    return User(id=1, email="test@example.com", full_name="Test User", is_active=True)
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: AsyncSession = Depends(get_db)):
+    return await auth_service.get_user_by_token(db, token)
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permite cambiar la contraseña estando autenticado (sin código de email).
+    Ideal para el flujo de cambio obligatorio en el primer ingreso.
+    """
+    await auth_service.change_password(db, current_user.email, request.new_password)
+    return {"message": "Password updated successfully"}
