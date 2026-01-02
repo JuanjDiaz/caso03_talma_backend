@@ -37,7 +37,7 @@ REGLAS DE ORO:
         if is_text:
             prompt = f"""{system_instructions}
 
-Analiza este contenido de TEXTO (Excel/CSV).
+Analiza este contenido de TEXTO (Excel/CSV/Word/Documento).
 Responde con un solo objeto en la lista.
 
 Formato requerido:

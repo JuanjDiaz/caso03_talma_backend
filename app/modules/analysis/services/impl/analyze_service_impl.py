@@ -5,6 +5,7 @@ import logging
 from io import BytesIO
 import openpyxl
 import fitz
+import docx
 from typing import Any, Dict, List, Tuple
 from fastapi import UploadFile
 
@@ -40,7 +41,7 @@ def process_file_content(content: bytes, filename: str) -> Tuple[List[str], str]
         base64_results.append(base64.b64encode(content).decode("utf-8"))
     
     # Check for Excel
-    elif filename.lower().endswith(('.xlsx', '.xlsm')):
+    elif FileUtil.is_valid_xlsx(content):
         try:
             wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
             text_parts = []
@@ -54,6 +55,29 @@ def process_file_content(content: bytes, filename: str) -> Tuple[List[str], str]
             text_result = "\n".join(text_parts)
         except Exception as e:
             logger.error(f"Error processing Excel {filename}: {e}", exc_info=True)
+            return [], ""
+
+    # Check for Word
+    elif FileUtil.is_valid_docx(content):
+        try:
+            doc = docx.Document(BytesIO(content))
+            text_parts = []
+            
+            # Extract text from paragraphs
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    text_parts.append(para.text)
+            
+            # Extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                    if row_text:
+                        text_parts.append(" | ".join(row_text))
+            
+            text_result = "\n".join(text_parts)
+        except Exception as e:
+            logger.error(f"Error processing Word {filename}: {e}", exc_info=True)
             return [], ""
 
     return base64_results, text_result
@@ -70,25 +94,41 @@ class AnalyzeServiceImpl(AnalyzeService):
         for file in t:
             content = await file.read()
             # Offload CPU-bound work to thread pool
-            pages = await loop.run_in_executor(None, process_file_content, content, file.filename)
+            images, text = await loop.run_in_executor(None, process_file_content, content, file.filename)
 
-            if not pages:
+            if not images and not text:
                 logger.warning(f"File {file.filename} is corrupt or invalid.")
                 raise AppBaseException(
                     message=f"El archivo {file.filename} está corrupto, vacío o tiene un formato no soportado."
                 )
             
             file_extracted_data = []
-            for idx, page_img in enumerate(pages):
-                data = await self.extraction_engine.extract_data_from_image(page_img)
-                file_extracted_data.append({
-                    "page": idx + 1,
-                    "content": data
-                })
+            
+            # Handle images (PDF/Images)
+            if images:
+                for idx, page_img in enumerate(images):
+                    data = await self.extraction_engine.extract_data_from_image(page_img)
+                    file_extracted_data.append({
+                        "page": idx + 1,
+                        "content": data
+                    })
+            # Handle text extraction (Excel/Word)
+            elif text:
+                 # Standardize to a single "page" for text-only documents in the legacy sync upload
+                 text_b64 = base64.b64encode(text.encode('utf-8')).decode('utf-8')
+                 # Use the generic document extraction for text
+                 # Since upload is likely for single images, this part might need mapping if used
+                 # For now, we reuse extraction_engine logic
+                 results_list = await self.extraction_engine.extract_single_document(text_b64, "text/plain", 1, 1)
+                 for idx, res in enumerate(results_list):
+                     file_extracted_data.append({
+                         "page": idx + 1,
+                         "content": res.get("fields", {})
+                     })
 
             results.append({
                 "filename": file.filename,
-                "total_pages": len(pages),
+                "total_pages": len(images) if images else 1,
                 "data": file_extracted_data
             })
 
@@ -107,12 +147,12 @@ class AnalyzeServiceImpl(AnalyzeService):
             
             yield self._build_sse_event({"thinking": f"Preparando archivo {idx + 1}/{total_files}: {filename}...\n"})
             
-            # Special case for Excel - keep our existing logic
-            if filename.lower().endswith(('.xlsx', '.xlsm')):
+            # Special case for Excel and Word - handle as text extraction
+            if FileUtil.is_valid_xlsx(content) or FileUtil.is_valid_docx(content):
                  loop = asyncio.get_running_loop()
-                 _, excel_text = await loop.run_in_executor(None, process_file_content, content, filename)
-                 if excel_text:
-                      text_b64 = base64.b64encode(excel_text.encode('utf-8')).decode('utf-8')
+                 _, extracted_text = await loop.run_in_executor(None, process_file_content, content, filename)
+                 if extracted_text:
+                      text_b64 = base64.b64encode(extracted_text.encode('utf-8')).decode('utf-8')
                       task = self.extraction_engine.extract_single_document(
                           text_b64, 
                           "text/plain", 

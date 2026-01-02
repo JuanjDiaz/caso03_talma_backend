@@ -40,6 +40,32 @@ class FileUtil:
             return False
 
             return False
+    @staticmethod
+    def is_valid_docx(data: bytes) -> bool:
+        try:
+            # Check for Word magic number PK\x03\x04
+            if not data.startswith(b"PK\x03\x04"):
+                return False
+            
+            # Use zipfile to check if it's a valid docx (it's a zip)
+            if zipfile.is_zipfile(io.BytesIO(data)):
+                return True
+            return False
+        except Exception:
+            return False
+    @staticmethod
+    def is_valid_xlsx(data: bytes) -> bool:
+        try:
+            # Check for Excel magic number PK\x03\x04
+            if not data.startswith(b"PK\x03\x04"):
+                return False
+            
+            # Use zipfile to check if it's a valid xlsx (it's a zip)
+            if zipfile.is_zipfile(io.BytesIO(data)):
+                return True
+            return False
+        except Exception:
+            return False
 
     @staticmethod
     async def validate_file(file: UploadFile):
