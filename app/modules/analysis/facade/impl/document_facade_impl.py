@@ -15,7 +15,7 @@ from fastapi.params import File
 from app.modules.analysis.facade.document_facade import DocumentFacade
 from app.modules.analysis.services.document_service import DocumentService
 from app.core.exceptions import AppBaseException
-from app.dto.guia_aerea_dtos import GuiaAereaComboResponse, GuiaAereaDataGridResponse, GuiaAereaFiltroRequest, GuiaAereaIntervinienteResponse, GuiaAereaRequest, GuiaAereaResponse
+from app.dto.guia_aerea_dtos import GuiaAereaComboResponse, GuiaAereaDataGridResponse, GuiaAereaFiltroRequest, GuiaAereaIntervinienteResponse, GuiaAereaRequest, GuiaAereaResponse, GuiaAereaSubsanarRequest
 from app.dto.collection_response import CollectionResponse
 from app.dto.universal_dto import BaseOperacionResponse
 from app.utils.generic_util import GenericUtil
@@ -78,8 +78,8 @@ class DocumentFacadeImpl(DocumentFacade):
         return guia_aerea_response
 
 
-    async def update(request: GuiaAereaRequest)  -> BaseOperacionResponse:
-        
+    async def updateAndReprocess(self, request: GuiaAereaSubsanarRequest) -> BaseOperacionResponse:
+        await self.document_service.updateAndReprocess(request)
         return BaseOperacionResponse(codigo="200", mensaje="Guía aérea reprocesada correctamente.")
 
 

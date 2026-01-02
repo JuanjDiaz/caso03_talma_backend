@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 from app.modules.analysis.domain.guia_aerea import GuiaAerea
-from app.dto.guia_aerea_dtos import  GuiaAereaFiltroRequest, GuiaAereaRequest
+from app.dto.guia_aerea_dtos import  GuiaAereaFiltroRequest, GuiaAereaRequest, GuiaAereaSubsanarRequest
 
 
 class DocumentService(ABC):
@@ -24,4 +24,8 @@ class DocumentService(ABC):
 
     @abstractmethod
     async def reprocess(self, document_id: str):
+        pass
+
+    @abstractmethod
+    async def updateAndReprocess(self, request: GuiaAereaSubsanarRequest):
         pass
