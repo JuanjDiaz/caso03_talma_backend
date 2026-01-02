@@ -27,12 +27,40 @@ class ExtractionEngineImpl(ExtractionEngine):
 Tu objetivo es extraer TODA la información del documento adjunto de forma estructurada.
 
 REGLAS DE ORO:
-1. Si encuentras TABLAS, lístalas como un ARRAY de OBJETOS dentro de una clave en 'fields'.
-   Ejemplo: "fields": { "Tabla_Actividades": [ {"Columna1": "Fila1_Val1", "Columna2": "Fila1_Val2"}, ... ] }
-2. Si el texto es MANUSCRITO (a mano), haz tu mejor esfuerzo por transcribirlo fielmente.
-3. NO inventes datos. Si algo es ilegible, usa null.
-4. Mantén los nombres de campos en MAYÚSCULAS y descriptivos.
-5. Devuelve SIEMPRE una lista (array) JSON."""
+1. Los 'intervinientes' deben seguir este orden ESTRICTO:
+   - 1ro: Remitente (Shipper) con tipoCodigo: "TPIN001".
+   - 2do: Consignatario (Consignee) con tipoCodigo: "TPIN002".
+2. Usa camelCase ESTRICTO para los nombres de los campos (ej. fechaEmision, numeroVuelo, pesoBruto).
+3. Incluye una lista 'confianzas' con objetos { "nombreCampo": "...", "valorExtraido": "...", "confidenceModelo": 0.0-1.0 }.
+   - Usa nombres amigables: "remitente.nombre", "consignatario.nombre", "numero", "fechaEmision", etc.
+   - NO uses corchetes como intervinientes[0].
+   - NO repitas campos.
+4. Si el texto es MANUSCRITO, haz tu mejor esfuerzo por transcribirlo fielmente.
+5. NO inventes datos. Si algo es ilegible, usa null.
+6. Devuelve SIEMPRE una lista (array) JSON.
+
+Estructura de campos requerida (fields):
+- intervinientes: [ { nombre, direccion, ciudad, paisCodigo, tipoDocumentoCodigo, numeroDocumento, tipoCodigo }, ... ]
+- numero, fechaEmision, origenCodigo, destinoCodigo, aerolineaCodigo, numeroVuelo, fechaVuelo, descripcionMercancia, cantidadPiezas, pesoBruto, pesoCobrado, unidadPesoCodigo, totalFlete, monedaCodigo, confianzas.
+"""
+
+        few_shot_structure = """
+Estructura esperada dentro del objeto 'fields':
+{
+    "intervinientes": [
+        { "nombre": "...", "direccion": "...", "ciudad": "...", "paisCodigo": "...", "tipoDocumentoCodigo": "RUC", "numeroDocumento": "...", "tipoCodigo": "TPIN001" },
+        { "nombre": "...", "direccion": "...", "ciudad": "...", "paisCodigo": "...", "tipoDocumentoCodigo": "VAT_ID", "numeroDocumento": "...", "tipoCodigo": "TPIN002" }
+    ],
+    "numero": "...",
+    "fechaEmision": "YYYY-MM-DDTHH:MM:SS",
+    "origenCodigo": "...",
+    "destinoCodigo": "...",
+    "descripcionMercancia": "...",
+    "confianzas": [
+        { "nombreCampo": "numero", "valorExtraido": "...", "confidenceModelo": 0.98 },
+        ...
+    ]
+}"""
 
         if is_text:
             prompt = f"""{system_instructions}
@@ -40,11 +68,13 @@ REGLAS DE ORO:
 Analiza este contenido de TEXTO (Excel/CSV/Word/Documento).
 Responde con un solo objeto en la lista.
 
+{few_shot_structure}
+
 Formato requerido:
 [
   {{
     "document_index": {start_index},
-    "document_name": "Datos de Excel/Texto",
+    "document_name": "Análisis de Documento",
     "fields": {{ ... }}
   }}
 ]"""
@@ -61,22 +91,26 @@ Formato requerido:
 Analiza este documento PDF por completo ({page_count} páginas).
 Debes devolver exactamente UNA LISTA con {page_count} objetos (uno por página).
 
+{few_shot_structure}
+
 Formato requerido:
 [
   {{
     "document_index": {start_index}, 
-    "document_name": "Nombre descriptivo de la página",
+    "document_name": "Página {start_index}",
     "fields": {{ ... }}
   }},
   ... (exactamente {page_count} páginas)
 ]"""
             contents = [prompt, {"mime_type": mime_type, "data": base64_data}]
         else:
-            # Images - specifically emphasize handwritten tables here
+            # Images
             prompt = f"""{system_instructions}
 
-Analiza esta IMAGEN. Puede contener texto MANUSCRITO y TABLAS.
-Es fundamental extraer las tablas correctamente como listas de objetos para que se visualicen bien.
+Analiza esta IMAGEN de una Guía Aérea. Puede contener texto MANUSCRITO.
+Es fundamental extraer todos los datos y la lista de intervinientes.
+
+{few_shot_structure}
 
 Formato requerido:
 [

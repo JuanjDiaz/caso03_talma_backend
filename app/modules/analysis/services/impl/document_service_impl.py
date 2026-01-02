@@ -42,7 +42,7 @@ class DocumentServiceImpl(DocumentService, ServiceBase):
         documento.estado_registro_codigo = Constantes.EstadoRegistroGuiaAereea.PROCESANDO
         await self.document_repository.save(documento)
         t.guiaAereaId = documento.guia_aerea_id
-            
+        
 
     async def save_all_confianza_extraccion(self, t: GuiaAereaRequest):
         confianzas_extraccion = []

@@ -10,9 +10,14 @@ from typing import Any, Dict, List, Tuple
 from fastapi import UploadFile
 
 from app.modules.analysis.services.analyze_service import AnalyzeService
+from app.modules.analysis.services.document_service import DocumentService
 from app.modules.integration.extraction_engine import ExtractionEngine
 from app.core.exceptions import AppBaseException
 from app.utils.file_util import FileUtil
+from app.dto.guia_aerea_dtos import GuiaAereaRequest
+from app.dto.interviniente_dtos import IntervinienteRequest
+from app.dto.confianza_extraccion_dtos import GuiaAereaConfianzaRequest
+from app.core.tasks.document_tasks import process_document_validations
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +140,7 @@ class AnalyzeServiceImpl(AnalyzeService):
         return results
 
 
-    async def upload_stream(self, files_data: List[Dict[str, Any]]):
+    async def upload_stream(self, files_data: List[Dict[str, Any]], document_service: DocumentService):
         all_docs_tasks = []
         total_files = len(files_data)
         
@@ -238,7 +243,144 @@ class AnalyzeServiceImpl(AnalyzeService):
             final_payload = json.dumps({"documents": documents})
             yield self._build_sse_event({"response": final_payload})
             
-            yield self._build_sse_event({"thinking": f"Análisis finalizado exitosamente. {len(documents)} documentos detectados."})
+            # 4. AUTO-SAVE EXTRACTED DATA (Colleague's logic integration)
+            if documents:
+                yield self._build_sse_event({"thinking": "Registrando información en la base de datos...\n"})
+                for doc_obj in documents:
+                    try:
+                        fields = doc_obj.get("fields", {})
+                        if not fields or not fields.get("numero"):
+                            logger.warning(f"Skipping auto-save for document '{doc_obj.get('fileName')}' - missing 'numero' field")
+                            yield self._build_sse_event({"thinking": f"[SKIP] {doc_obj.get('fileName')}: No se detectó número de guía\\n"})
+                            continue
+                        
+                        # Map fields to GuiaAereaRequest exactly as requested by colleague
+                        # Extract intervinientes
+                        intervinientes_data = fields.get("intervinientes", [])
+                        intervinientes_req = []
+                        for inter in intervinientes_data:
+                            intervinientes_req.append(IntervinienteRequest(**inter))
+                        
+                        # Extract confianzas
+                        confianzas_data = fields.get("confianzas", [])
+                        confianzas_req = []
+                        for conf in confianzas_data:
+                            confianzas_req.append(GuiaAereaConfianzaRequest(**conf))
+
+                        # Build the main request
+                        # Note: We use all available fields from the LLM extraction
+                        # For required fields, we provide defaults if missing
+                        from datetime import datetime
+                        
+                        # Track missing critical fields for observation
+                        missing_fields = []
+                        
+                        # Check critical fields
+                        moneda = fields.get("monedaCodigo")
+                        if not moneda:
+                            missing_fields.append("monedaCodigo")
+                            moneda = "USD"  # Default
+                        
+                        total_flete = fields.get("totalFlete")
+                        # Validate that totalFlete is numeric
+                        if total_flete:
+                            try:
+                                # Try to convert to float to validate
+                                float(total_flete)
+                            except (ValueError, TypeError):
+                                # Non-numeric value like "AS ARRANGED"
+                                logger.warning(f"Non-numeric totalFlete value: {total_flete}")
+                                missing_fields.append("totalFlete")
+                                total_flete = 0
+                        else:
+                            missing_fields.append("totalFlete")
+                            total_flete = 0
+                        
+                        fecha_emision = fields.get("fechaEmision")
+                        if not fecha_emision:
+                            missing_fields.append("fechaEmision")
+                            fecha_emision = datetime.now()
+                        
+                        origen = fields.get("origenCodigo")
+                        if not origen:
+                            missing_fields.append("origenCodigo")
+                            origen = "N/A"
+                        
+                        destino = fields.get("destinoCodigo")
+                        if not destino:
+                            missing_fields.append("destinoCodigo")
+                            destino = "N/A"
+                        
+                        cantidad = fields.get("cantidadPiezas")
+                        # Validate that cantidadPiezas is numeric
+                        if cantidad:
+                            try:
+                                int(cantidad)
+                            except (ValueError, TypeError):
+                                logger.warning(f"Non-numeric cantidadPiezas value: {cantidad}")
+                                missing_fields.append("cantidadPiezas")
+                                cantidad = 1
+                        else:
+                            missing_fields.append("cantidadPiezas")
+                            cantidad = 1
+                        
+                        # Also validate other numeric fields and set to None if invalid
+                        peso_bruto = fields.get("pesoBruto")
+                        if peso_bruto:
+                            try:
+                                float(peso_bruto)
+                            except (ValueError, TypeError):
+                                logger.warning(f"Non-numeric pesoBruto value: {peso_bruto}, setting to None")
+                                peso_bruto = None
+                        
+                        peso_cobrado = fields.get("pesoCobrado")
+                        if peso_cobrado:
+                            try:
+                                float(peso_cobrado)
+                            except (ValueError, TypeError):
+                                logger.warning(f"Non-numeric pesoCobrado value: {peso_cobrado}, setting to None")
+                                peso_cobrado = None
+                        
+                        guia_req = GuiaAereaRequest(
+                            numero=fields.get("numero"),
+                            fechaEmision=fecha_emision,
+                            origenCodigo=origen,
+                            destinoCodigo=destino,
+                            aerolineaCodigo=fields.get("aerolineaCodigo"),
+                            numeroVuelo=fields.get("numeroVuelo"),
+                            fechaVuelo=fields.get("fechaVuelo"),
+                            descripcionMercancia=fields.get("descripcionMercancia"),
+                            cantidadPiezas=cantidad,
+                            pesoBruto=peso_bruto,
+                            pesoCobrado=peso_cobrado,
+                            unidadPesoCodigo=fields.get("unidadPesoCodigo"),
+                            totalFlete=total_flete,
+                            monedaCodigo=moneda,
+                            intervinientes=intervinientes_req,
+                            confianzas=confianzas_req
+                        )
+                        
+                        # If critical fields are missing, add observation
+                        if missing_fields:
+                            obs_msg = f"Campos críticos no detectados por la IA: {', '.join(missing_fields)}. Requiere revisión manual."
+                            guia_req.observaciones = obs_msg
+                            guia_req.estadoRegistroCodigo = "ESTGA002"  # OBSERVADO
+                            logger.warning(f"AWB {guia_req.numero} marked as OBSERVADO due to missing fields: {missing_fields}")
+                            yield self._build_sse_event({"thinking": f"[WARN] {doc_obj.get('fileName')}: Faltan campos críticos, marcada para revisión\\n"})
+                        
+                        # Persistent save via DocumentService
+                        await document_service.saveOrUpdate(guia_req)
+                        
+                        # Trigger background validations exactly like DocumentFacade does
+                        if guia_req.guiaAereaId:
+                            process_document_validations.delay(guia_req.model_dump_json())
+                            logger.info(f"Auto-saved AWB {guia_req.numero} (ID: {guia_req.guiaAereaId}) and triggered validations.")
+                        
+                    except Exception as save_err:
+                        logger.error(f"Error auto-saving document {doc_obj.get('fileName')}: {save_err}")
+                        yield self._build_sse_event({"thinking": f"[WARN] No se pudo auto-guardar {doc_obj.get('fileName')}: {str(save_err)}\n"})
+
+            yield self._build_sse_event({"thinking": f"Análisis y registro finalizado exitosamente. {len(documents)} documentos procesados."})
 
         except Exception as e:
             logger.error(f"Critical Error during parallel extraction: {e}", exc_info=True)

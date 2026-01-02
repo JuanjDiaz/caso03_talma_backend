@@ -4,7 +4,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class GuiaAereaConfianzaRequest(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True, 
+        coerce_numbers_to_str=True  # Esto permitirá que el 6 se convierta en "6" sin error
+    )
     
     confianzaExtraccionId: Optional[UUID] = None
     guiaAereaId: Optional[UUID] = None

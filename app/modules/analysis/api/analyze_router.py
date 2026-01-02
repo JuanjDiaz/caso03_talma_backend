@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
 from app.modules.analysis.dependencies.dependencies_analyze import get_analyze_service
 from app.modules.analysis.services.analyze_service import AnalyzeService
+from app.modules.analysis.services.document_service import DocumentService
+from app.modules.analysis.dependencies.dependencies_documento import get_document_service
 
 
 from app.utils.file_util import FileUtil
@@ -10,7 +12,11 @@ from app.utils.file_util import FileUtil
 router = APIRouter()
 
 @router.post("/upload")
-async def upload(files: List[UploadFile] = File(...), analyze_service: AnalyzeService = Depends(get_analyze_service)):
+async def upload(
+    files: List[UploadFile] = File(...), 
+    analyze_service: AnalyzeService = Depends(get_analyze_service),
+    document_service: DocumentService = Depends(get_document_service)
+):
     files_data = []
     for file in files:
         await FileUtil.validate_file(file)
@@ -18,6 +24,6 @@ async def upload(files: List[UploadFile] = File(...), analyze_service: AnalyzeSe
         files_data.append({"filename": file.filename, "content": content})
     
     async def event_stream():
-        async for token in analyze_service.upload_stream(files_data):
+        async for token in analyze_service.upload_stream(files_data, document_service):
             yield token
     return StreamingResponse(event_stream(), media_type="text/event-stream")
