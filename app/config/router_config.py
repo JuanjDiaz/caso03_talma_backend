@@ -1,0 +1,22 @@
+
+from fastapi import FastAPI, Depends
+from app.modules.auth.api import auth_router
+from app.modules.analysis.api import analyze_router, document_router
+from app.modules.security.api import usuario_router
+from app.config.config import settings
+from app.core.exceptions import setup_exception_handlers
+from app.modules.auth.dependencies.dependencies_auth import get_current_user
+
+def setup_routes(app: FastAPI):
+    app.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
+    app.include_router(analyze_router.router, prefix="/analyze", tags=["Analyze"], dependencies=[Depends(get_current_user)])
+    app.include_router(document_router.router, prefix="/document", tags=["Document"], dependencies=[Depends(get_current_user)])
+    app.include_router(usuario_router.router, prefix="/usuario", tags=["Usuario"], dependencies=[Depends(get_current_user)])
+    
+    from app.core.realtime import websocket
+    app.include_router(websocket.router, prefix="/documents", tags=["WebSockets"])
+    setup_exception_handlers(app)
+    
+    @app.get("/")
+    async def root():
+        return {"message": f"Welcome to {settings.PROJECT_NAME}"}
