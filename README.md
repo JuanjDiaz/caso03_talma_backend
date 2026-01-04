@@ -3,5 +3,5 @@ Backend de desarrollo de sistema de extracción y anonimización de datos a part
 
 # Comandos para ejecutar el proyecto (cada uno en otro cmd)
 1. docker run --name redis-talma -p 6379:6379 -d redis
-2. (activate) : celery -A app.core.celery_app worker --loglevel=info --pool=solo
+2. (activate) : celery -A app.modules.analysis.celery_app.celery_app worker --loglevel=info --pool=solo -Q document_queue
 3. uvicorn main:app --reload

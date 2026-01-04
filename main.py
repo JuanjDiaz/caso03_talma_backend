@@ -1,10 +1,10 @@
 
-from app.core.domain.base_model import Base
-from config.app_logging import setup_logging
-from config.router_doc_config import app
-from config.cors_config import setup_cors
-from config.router_config import setup_routes
-from config.database_config import engine
+from app.modules.analysis.domain.base_model import Base
+from app.config.app_logging import setup_logging
+from app.config.router_doc_config import app
+from app.config.cors_config import setup_cors
+from app.config.router_config import setup_routes
+from app.config.database_config import engine
 from sqlalchemy.ext.asyncio import AsyncSession
 
 setup_logging()
@@ -21,7 +21,7 @@ async def on_startup():
     
     # Iniciar listener de Redis para WebSockets
     import asyncio
-    from core.realtime.websocket import redis_connector
+    from app.core.realtime.websocket import redis_connector
     
     # Keep a strong reference to the task to avoid it being garbage collected
     if not hasattr(app.state, "background_tasks"):
